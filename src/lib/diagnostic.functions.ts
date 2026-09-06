@@ -1,5 +1,4 @@
 import { createServerFn } from "@tanstack/react-start";
-import { lookup } from "node:dns/promises";
 import { z } from "zod";
 
 const inputSchema = z.object({
@@ -119,21 +118,22 @@ function isPrivateOrReservedIpv6(ip: string): boolean {
   return false;
 }
 
-/** Resolves the hostname and rejects anything pointing at a private, loopback, or
- * link-local address, guarding against the server being used to probe internal
- * network endpoints (SSRF) via a user-supplied "company website" URL. */
-async function isSafeHostname(hostname: string): Promise<boolean> {
-  const lower = hostname.toLowerCase();
+/** Rejects hostnames that are obviously private/loopback/link-local, guarding against
+ * the server being used to probe internal network endpoints (SSRF) via a user-supplied
+ * "company website" URL.
+ *
+ * This deploys to Cloudflare Workers (Nitro's cloudflare preset — see vite.config.ts),
+ * which doesn't support Node's `dns` module, so a real hostname resolve-then-check isn't
+ * available here. This is defense-in-depth for the obvious cases (someone typing
+ * "localhost" or a raw private IP directly) — the primary backstop against DNS-rebinding
+ * style SSRF is the Workers platform itself, which sandboxes outbound fetch() from ever
+ * reaching private/internal/loopback IP ranges regardless of what a Worker's code does. */
+function isSafeHostname(hostname: string): boolean {
+  const lower = hostname.toLowerCase().replace(/^\[|\]$/g, "");
   if (lower === "localhost" || lower.endsWith(".localhost") || lower === "0.0.0.0") return false;
-  try {
-    const addresses = await lookup(hostname, { all: true });
-    if (addresses.length === 0) return false;
-    return addresses.every(({ address, family }) =>
-      family === 6 ? !isPrivateOrReservedIpv6(address) : !isPrivateOrReservedIpv4(address),
-    );
-  } catch {
-    return false;
-  }
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(lower)) return !isPrivateOrReservedIpv4(lower);
+  if (lower.includes(":")) return !isPrivateOrReservedIpv6(lower);
+  return true;
 }
 
 const SIGNAL_PATTERNS: { label: string; patterns: RegExp[] }[] = [
@@ -174,12 +174,12 @@ const SIGNAL_PATTERNS: { label: string; patterns: RegExp[] }[] = [
 const MAX_REDIRECTS = 4;
 
 /** Returns a failure note if this URL isn't safe to fetch, or null if it's clear to proceed. */
-async function unsafeUrlReason(url: URL): Promise<string | null> {
+function unsafeUrlReason(url: URL): string | null {
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     return "Only http/https website URLs are supported, so this report falls back to inference only.";
   }
-  if (!(await isSafeHostname(url.hostname))) {
-    return "This URL couldn't be verified as a reachable public website, so this report falls back to inference only.";
+  if (!isSafeHostname(url.hostname)) {
+    return "This hostname isn't allowed, so this report falls back to inference only.";
   }
   return null;
 }
@@ -208,7 +208,7 @@ async function checkWebsite(rawUrl: string): Promise<SiteCheck> {
     // Each hop is re-validated for SSRF safety before being fetched — a redirect can't be
     // used to smuggle a request to a private/internal address past the initial check.
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-      const unsafe = await unsafeUrlReason(url);
+      const unsafe = unsafeUrlReason(url);
       if (unsafe) return fail(unsafe, url.toString());
 
       const res = await fetch(url.toString(), {
