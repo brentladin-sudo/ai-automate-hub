@@ -533,6 +533,72 @@ function Index() {
                           <dd className="mt-1 text-foreground/90">{wf.aiApproach}</dd>
                         </div>
                       </dl>
+
+                      {(wf.timeCost || wf.readinessTier || wf.toolRationale) && (
+                        <>
+                          <div className="mt-5">
+                            <ExpandToggle
+                              open={!!openWorkflows[wf.name]}
+                              onClick={() => toggleWorkflow(wf.name)}
+                              label="Go deeper"
+                            />
+                          </div>
+                          <Collapse open={!!openWorkflows[wf.name]}>
+                            <div className="mt-5 space-y-4 border-t border-border pt-5 text-sm leading-relaxed">
+                              {wf.timeCost && (
+                                <div className="flex items-start gap-3">
+                                  <Clock className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                                  <div>
+                                    <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                                      Time &amp; cost today
+                                    </p>
+                                    <p className="mt-1 text-foreground/90">{wf.timeCost}</p>
+                                  </div>
+                                </div>
+                              )}
+                              {wf.readinessTier && (
+                                <div className="flex items-start gap-3">
+                                  <Zap className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                                  <div>
+                                    <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                                      Readiness tier
+                                    </p>
+                                    <p className="mt-1.5">
+                                      <span
+                                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                                          wf.readinessTier === "Quick Win"
+                                            ? "bg-primary/15 text-primary"
+                                            : "bg-secondary text-secondary-foreground"
+                                        }`}
+                                      >
+                                        {wf.readinessTier}
+                                      </span>
+                                      <span className="ml-2 text-xs text-muted-foreground">
+                                        {wf.readinessTier === "Quick Win"
+                                          ? "Deployable in weeks"
+                                          : "Requires data infrastructure first"}
+                                      </span>
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+                              {wf.toolRationale && (
+                                <div className="flex items-start gap-3">
+                                  <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                                  <div>
+                                    <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                                      Why this tool
+                                    </p>
+                                    <p className="mt-1 text-muted-foreground">
+                                      {wf.toolRationale}
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </Collapse>
+                        </>
+                      )}
                     </article>
                   ))}
                 </div>
