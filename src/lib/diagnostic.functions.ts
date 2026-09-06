@@ -171,6 +171,19 @@ const SIGNAL_PATTERNS: { label: string; patterns: RegExp[] }[] = [
   },
 ];
 
+const MAX_REDIRECTS = 4;
+
+/** Returns a failure note if this URL isn't safe to fetch, or null if it's clear to proceed. */
+async function unsafeUrlReason(url: URL): Promise<string | null> {
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return "Only http/https website URLs are supported, so this report falls back to inference only.";
+  }
+  if (!(await isSafeHostname(url.hostname))) {
+    return "This URL couldn't be verified as a reachable public website, so this report falls back to inference only.";
+  }
+  return null;
+}
+
 async function checkWebsite(rawUrl: string): Promise<SiteCheck> {
   const fail = (note: string, url = rawUrl): SiteCheck => ({
     url,
@@ -187,52 +200,64 @@ async function checkWebsite(rawUrl: string): Promise<SiteCheck> {
     return fail("The provided website URL couldn't be parsed, so this report falls back to inference only.");
   }
 
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    return fail("Only http/https website URLs are supported, so this report falls back to inference only.", url.toString());
-  }
-
-  if (!(await isSafeHostname(url.hostname))) {
-    return fail(
-      "This URL couldn't be verified as a reachable public website, so this report falls back to inference only.",
-      url.toString(),
-    );
-  }
-
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 5000);
   try {
-    const res = await fetch(url.toString(), {
-      signal: controller.signal,
-      redirect: "manual",
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; GoAutomateBot/1.0)" },
-    });
+    // Bounded redirect following: real company sites routinely redirect apex <-> www or
+    // http -> https, so refusing all redirects would make this feature rarely succeed.
+    // Each hop is re-validated for SSRF safety before being fetched — a redirect can't be
+    // used to smuggle a request to a private/internal address past the initial check.
+    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+      const unsafe = await unsafeUrlReason(url);
+      if (unsafe) return fail(unsafe, url.toString());
 
-    if (res.status >= 300 && res.status < 400) {
-      return fail("This website redirected, so it couldn't be checked directly — falling back to inference only.", url.toString());
+      const res = await fetch(url.toString(), {
+        signal: controller.signal,
+        redirect: "manual",
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; GoAutomateBot/1.0)" },
+      });
+
+      if (res.status >= 300 && res.status < 400) {
+        const location = res.headers.get("location");
+        if (!location || hop === MAX_REDIRECTS) {
+          return fail(
+            "This website redirected too many times (or to an invalid destination), so this report falls back to inference only.",
+            url.toString(),
+          );
+        }
+        try {
+          url = new URL(location, url);
+        } catch {
+          return fail("This website redirected to an unparseable URL, so this report falls back to inference only.", url.toString());
+        }
+        continue;
+      }
+
+      if (!res.ok) {
+        return fail(`The website returned HTTP ${res.status}, so this report falls back to inference only.`, url.toString());
+      }
+
+      const html = (await res.text()).slice(0, 500_000);
+      const lower = html.toLowerCase();
+
+      const signals: SiteSignal[] = SIGNAL_PATTERNS.map(({ label, patterns }) => ({
+        label,
+        present: patterns.some((p) => p.test(lower)),
+      }));
+
+      const ctaCandidates = [...html.matchAll(/<(?:a|button)[^>]*>\s*([^<]{2,40}?)\s*<\/(?:a|button)>/gi)]
+        .map((m) => (m[1] ?? "").replace(/\s+/g, " ").trim())
+        .filter((text) => /get started|book|schedule|sign up|contact|buy|shop|order now|start|try|demo|learn more|call us/i.test(text));
+
+      return {
+        url: url.toString(),
+        fetchedOk: true,
+        signals,
+        primaryCta: ctaCandidates[0] ?? null,
+        note: "These signals were detected directly from the company's homepage HTML — a real check, not an LLM guess.",
+      };
     }
-    if (!res.ok) {
-      return fail(`The website returned HTTP ${res.status}, so this report falls back to inference only.`, url.toString());
-    }
-
-    const html = (await res.text()).slice(0, 500_000);
-    const lower = html.toLowerCase();
-
-    const signals: SiteSignal[] = SIGNAL_PATTERNS.map(({ label, patterns }) => ({
-      label,
-      present: patterns.some((p) => p.test(lower)),
-    }));
-
-    const ctaCandidates = [...html.matchAll(/<(?:a|button)[^>]*>\s*([^<]{2,40}?)\s*<\/(?:a|button)>/gi)]
-      .map((m) => (m[1] ?? "").replace(/\s+/g, " ").trim())
-      .filter((text) => /get started|book|schedule|sign up|contact|buy|shop|order now|start|try|demo|learn more|call us/i.test(text));
-
-    return {
-      url: url.toString(),
-      fetchedOk: true,
-      signals,
-      primaryCta: ctaCandidates[0] ?? null,
-      note: "These signals were detected directly from the company's homepage HTML — a real check, not an LLM guess.",
-    };
+    return fail("This website redirected too many times, so this report falls back to inference only.", url.toString());
   } catch {
     return fail("Couldn't reach this website (timeout or network error), so this report falls back to inference only.", url.toString());
   } finally {
