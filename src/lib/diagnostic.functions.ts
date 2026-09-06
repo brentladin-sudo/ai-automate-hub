@@ -89,6 +89,11 @@ Include 3 to 5 workflows. Order them by score descending.`;
     const content: string = payload.choices?.[0]?.message?.content ?? "";
     const parsed = JSON.parse(content);
 
+    const tierSchema = z.object({
+      approach: z.string(),
+      tools: z.array(z.string()),
+    });
+
     const resultSchema = z.object({
       overallScore: z.number().min(0).max(100),
       scoreLabel: z.string(),
