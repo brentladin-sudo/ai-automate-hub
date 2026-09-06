@@ -2,13 +2,17 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   ArrowRight,
+  ChevronDown,
+  Clock,
   History,
+  Info,
   Loader2,
   Plus,
   Search,
   Sparkles,
   Trash2,
   Wrench,
+  Zap,
 } from "lucide-react";
 import { runDiagnostic, type DiagnosticResult, type Workflow } from "@/lib/diagnostic.functions";
 
@@ -122,6 +126,46 @@ function tierFor(wf: Workflow, level: 1 | 2 | 3) {
   return { approach: wf.aiApproach, tools: wf.tools ?? [] };
 }
 
+function ExpandToggle({
+  open,
+  onClick,
+  label,
+}: {
+  open: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-expanded={open}
+      className="inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary/40 px-3 py-1.5 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase transition-colors hover:border-primary/40 hover:text-foreground"
+    >
+      {open ? "Less" : label}
+      <ChevronDown
+        className={`h-3.5 w-3.5 transition-transform duration-300 ${open ? "rotate-180" : ""}`}
+      />
+    </button>
+  );
+}
+
+function Collapse({ open, children }: { open: boolean; children: React.ReactNode }) {
+  const [mounted, setMounted] = useState(open);
+
+  useEffect(() => {
+    if (open) setMounted(true);
+  }, [open]);
+
+  return (
+    <div
+      className="grid transition-[grid-template-rows,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
+      style={{ gridTemplateRows: open ? "1fr" : "0fr", opacity: open ? 1 : 0 }}
+    >
+      <div className="overflow-hidden">{mounted ? children : null}</div>
+    </div>
+  );
+}
+
 function Index() {
   const [companyName, setCompanyName] = useState("");
   const [description, setDescription] = useState("");
@@ -132,6 +176,12 @@ function Index() {
   const [query, setQuery] = useState("");
   const [activeId, setActiveId] = useState<string | null>(null);
   const [level, setLevel] = useState<1 | 2 | 3>(2);
+  const [scoreOpen, setScoreOpen] = useState(false);
+  const [openWorkflows, setOpenWorkflows] = useState<Record<string, boolean>>({});
+
+  const toggleWorkflow = (name: string) =>
+    setOpenWorkflows((prev) => ({ ...prev, [name]: !prev[name] }));
+
 
   useEffect(() => {
     setHistory(loadHistory());
@@ -167,6 +217,8 @@ function Index() {
       setActiveId(entry.id);
       setResult(res);
       setLevel(2);
+      setScoreOpen(false);
+      setOpenWorkflows({});
     } catch {
       setError("The diagnostic couldn't complete. Please try again.");
     } finally {
@@ -186,6 +238,8 @@ function Index() {
     setResult(entry.result);
     setActiveId(entry.id);
     setLevel(2);
+    setScoreOpen(false);
+    setOpenWorkflows({});
     setError(null);
   };
 
@@ -379,13 +433,56 @@ function Index() {
                   style={{ animationDelay: "120ms" }}
                 >
                   <ScoreRail score={result.overallScore} size="lg" />
-                  <div className="mt-6 flex flex-wrap items-baseline gap-x-4 gap-y-1">
-                    <span className="font-display text-5xl font-bold tracking-tight text-primary">
-                      {result.overallScore}
-                      <span className="text-2xl text-muted-foreground">/100</span>
-                    </span>
-                    <span className="text-base font-semibold">{result.scoreLabel}</span>
+                  <div className="mt-6 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-3">
+                    <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+                      <span className="font-display text-5xl font-bold tracking-tight text-primary">
+                        {result.overallScore}
+                        <span className="text-2xl text-muted-foreground">/100</span>
+                      </span>
+                      <span className="text-base font-semibold">{result.scoreLabel}</span>
+                    </div>
+                    {result.dimensions && result.dimensions.length > 0 && (
+                      <ExpandToggle
+                        open={scoreOpen}
+                        onClick={() => setScoreOpen((v) => !v)}
+                        label="Breakdown"
+                      />
+                    )}
                   </div>
+
+                  {result.dimensions && result.dimensions.length > 0 && (
+                    <Collapse open={scoreOpen}>
+                      <div className="mt-7 border-t border-border pt-6">
+                        <p className="text-xs leading-relaxed text-muted-foreground">
+                          The overall score is a weighted composite of these four
+                          sub-dimensions.
+                        </p>
+                        <div className="mt-5 space-y-6">
+                          {result.dimensions.map((d, di) => (
+                            <div key={d.name}>
+                              <div className="flex items-baseline justify-between gap-3">
+                                <span className="text-sm font-semibold">{d.name}</span>
+                                <span className="font-display text-sm font-bold text-primary">
+                                  {d.score}/100
+                                </span>
+                              </div>
+                              <div className="mt-2">
+                                <ScoreRail
+                                  key={scoreOpen ? "open" : "closed"}
+                                  score={d.score}
+                                  size="sm"
+                                  delay={di * 90}
+                                />
+                              </div>
+                              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                                {d.explanation}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </Collapse>
+                  )}
                 </section>
 
                 <section
@@ -436,6 +533,72 @@ function Index() {
                           <dd className="mt-1 text-foreground/90">{wf.aiApproach}</dd>
                         </div>
                       </dl>
+
+                      {(wf.timeCost || wf.readinessTier || wf.toolRationale) && (
+                        <>
+                          <div className="mt-5">
+                            <ExpandToggle
+                              open={!!openWorkflows[wf.name]}
+                              onClick={() => toggleWorkflow(wf.name)}
+                              label="Go deeper"
+                            />
+                          </div>
+                          <Collapse open={!!openWorkflows[wf.name]}>
+                            <div className="mt-5 space-y-4 border-t border-border pt-5 text-sm leading-relaxed">
+                              {wf.timeCost && (
+                                <div className="flex items-start gap-3">
+                                  <Clock className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                                  <div>
+                                    <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                                      Time &amp; cost today
+                                    </p>
+                                    <p className="mt-1 text-foreground/90">{wf.timeCost}</p>
+                                  </div>
+                                </div>
+                              )}
+                              {wf.readinessTier && (
+                                <div className="flex items-start gap-3">
+                                  <Zap className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                                  <div>
+                                    <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                                      Readiness tier
+                                    </p>
+                                    <p className="mt-1.5">
+                                      <span
+                                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                                          wf.readinessTier === "Quick Win"
+                                            ? "bg-primary/15 text-primary"
+                                            : "bg-secondary text-secondary-foreground"
+                                        }`}
+                                      >
+                                        {wf.readinessTier}
+                                      </span>
+                                      <span className="ml-2 text-xs text-muted-foreground">
+                                        {wf.readinessTier === "Quick Win"
+                                          ? "Deployable in weeks"
+                                          : "Requires data infrastructure first"}
+                                      </span>
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+                              {wf.toolRationale && (
+                                <div className="flex items-start gap-3">
+                                  <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                                  <div>
+                                    <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                                      Why this tool
+                                    </p>
+                                    <p className="mt-1 text-muted-foreground">
+                                      {wf.toolRationale}
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </Collapse>
+                        </>
+                      )}
                     </article>
                   ))}
                 </div>
@@ -506,6 +669,30 @@ function Index() {
                     );
                   })}
                 </div>
+
+                <section className="mt-14 border-t border-dashed border-border pt-8">
+                  <h3 className="font-display text-lg font-semibold tracking-tight text-muted-foreground">
+                    What This Diagnostic Cannot Tell You
+                  </h3>
+                  <p className="mt-1 text-xs text-muted-foreground/70">
+                    Caveats, not findings — these need a conversation inside the business.
+                  </p>
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                    {(result.limitations ?? FALLBACK_LIMITATIONS).map((lim) => (
+                      <div
+                        key={lim.title}
+                        className="rounded-xl border border-dashed border-border bg-transparent px-5 py-4"
+                      >
+                        <p className="text-sm font-medium text-muted-foreground">
+                          {lim.title}
+                        </p>
+                        <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground/70">
+                          {lim.detail}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
               </div>
             )}
           </div>
