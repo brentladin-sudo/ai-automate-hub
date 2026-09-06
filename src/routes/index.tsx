@@ -217,6 +217,8 @@ function Index() {
       setActiveId(entry.id);
       setResult(res);
       setLevel(2);
+      setScoreOpen(false);
+      setOpenWorkflows({});
     } catch {
       setError("The diagnostic couldn't complete. Please try again.");
     } finally {
@@ -236,6 +238,8 @@ function Index() {
     setResult(entry.result);
     setActiveId(entry.id);
     setLevel(2);
+    setScoreOpen(false);
+    setOpenWorkflows({});
     setError(null);
   };
 
