@@ -6,12 +6,23 @@ const inputSchema = z.object({
   description: z.string().max(4000).optional(),
 });
 
+export type StackTier = {
+  approach: string;
+  tools: string[];
+};
+
 export type Workflow = {
   name: string;
   score: number;
   manualToday: string;
   aiApproach: string;
-  tools: string[];
+  /** Legacy single-tier stack (older saved reports). */
+  tools?: string[];
+  stack?: {
+    level1: StackTier;
+    level2: StackTier;
+    level3: StackTier;
+  };
 };
 
 export type DiagnosticResult = {
