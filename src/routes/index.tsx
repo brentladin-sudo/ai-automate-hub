@@ -219,8 +219,10 @@ function Index() {
       setLevel(2);
       setScoreOpen(false);
       setOpenWorkflows({});
-    } catch {
-      setError("The diagnostic couldn't complete. Please try again.");
+    } catch (err) {
+      console.error("Diagnostic request failed:", err);
+      const message = err instanceof Error && err.message ? err.message : "The diagnostic couldn't complete. Please try again.";
+      setError(message);
     } finally {
       setLoading(false);
     }

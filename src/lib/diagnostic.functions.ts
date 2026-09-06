@@ -111,12 +111,36 @@ Include 3 to 5 workflows, ordered by score descending. Exactly the 4 dimensions 
     if (!res.ok) {
       const text = await res.text();
       console.error("AI gateway error", res.status, text);
-      throw new Error("Diagnostic failed — please try again");
+      if (res.status === 401 || res.status === 403) {
+        throw new Error("Diagnostic failed — the AI gateway rejected our credentials. Check LOVABLE_API_KEY.");
+      }
+      if (res.status === 429) {
+        throw new Error("Diagnostic failed — the AI gateway is rate-limited. Please wait a moment and try again.");
+      }
+      throw new Error(`Diagnostic failed — AI gateway returned ${res.status}. Please try again.`);
     }
 
     const payload = await res.json();
-    const content: string = payload.choices?.[0]?.message?.content ?? "";
-    const parsed = JSON.parse(content);
+    const rawContent: string = payload.choices?.[0]?.message?.content ?? "";
+    // Some models wrap JSON in ```json ... ``` fences even when response_format
+    // is requested. Strip those defensively before parsing.
+    const content = rawContent
+      .trim()
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/```\s*$/i, "");
+
+    if (!content) {
+      console.error("AI gateway returned empty content", payload);
+      throw new Error("Diagnostic failed — the AI returned an empty response. Please try again.");
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(content);
+    } catch (err) {
+      console.error("Failed to parse AI response as JSON", err, "raw content:", content);
+      throw new Error("Diagnostic failed — the AI response was malformed. Please try again.");
+    }
 
     const tierSchema = z.object({
       approach: z.string(),
@@ -160,6 +184,16 @@ Include 3 to 5 workflows, ordered by score descending. Exactly the 4 dimensions 
         .optional(),
     });
 
-    const validated = resultSchema.parse(parsed);
-    return { companyName: data.companyName, ...validated };
+    const validation = resultSchema.safeParse(parsed);
+    if (!validation.success) {
+      console.error(
+        "AI response failed schema validation",
+        validation.error.flatten(),
+        "raw parsed content:",
+        parsed,
+      );
+      throw new Error("Diagnostic failed — the AI response didn't match the expected format. Please try again.");
+    }
+
+    return { companyName: data.companyName, ...validation.data };
   });
