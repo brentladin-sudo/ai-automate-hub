@@ -72,16 +72,28 @@ Return ONLY valid JSON with this exact shape:
       "score": <integer 0-100 automation potential for this workflow>,
       "manualToday": <one sentence describing how this workflow is done manually today>,
       "aiApproach": <one sentence describing the suggested AI-driven automation>,
+      "timeCost": <one short phrase framing time/cost, e.g. "~6 hours per week per affected employee, ~$28k/yr across the team">,
+      "readinessTier": <"Quick Win" or "Structural Play">,
+      "toolRationale": <1-2 sentences on why the recommended tool fits this workflow better than alternatives>,
       "stack": {
         "level1": { "approach": <one sentence: quick, low-effort no-code fix shippable in days>, "tools": [<2-3 real off-the-shelf tools>] },
         "level2": { "approach": <one sentence: mid-effort integrated solution, weeks of work>, "tools": [<2-4 real tools/platforms>] },
         "level3": { "approach": <one sentence: bespoke engineered system, months of work>, "tools": [<2-4 real platforms, models, or infrastructure>] }
       }
     }
+  ],
+  "dimensions": [
+    { "name": "Data Readiness", "score": <0-100>, "explanation": <one sentence on how structured and accessible this company's data is> },
+    { "name": "Process Repeatability", "score": <0-100>, "explanation": <one sentence on how rule-based vs judgment-heavy the core workflows are> },
+    { "name": "Integration Complexity", "score": <0-100, higher = EASIER to integrate / less legacy lock-in>, "explanation": <one sentence on legacy system lock-in> },
+    { "name": "Change Management Risk", "score": <0-100, higher = LESS resistance expected>, "explanation": <one sentence on likely organizational resistance to AI adoption> }
+  ],
+  "limitations": [
+    { "title": <short caveat title>, "detail": <one sentence on what this diagnostic cannot see> }
   ]
 }
 Level 1 = simple/off-the-shelf, Level 2 = integrated/configured, Level 3 = custom-built and deeply integrated. Tools must be real and specific (e.g. "Zapier AI", "Intercom Fin", "OpenAI GPT-4o", "UiPath", "LangGraph", "Snowflake Cortex").
-Include 3 to 5 workflows. Order them by score descending.`;
+Include 3 to 5 workflows, ordered by score descending. Exactly the 4 dimensions listed, in that order — the overallScore should read as a weighted composite of them. Include 3-4 limitations covering actual internal data quality, organizational political will, budget constraints, and change management capacity.`;
 
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
