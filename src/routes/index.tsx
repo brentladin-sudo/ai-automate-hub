@@ -176,6 +176,12 @@ function Index() {
   const [query, setQuery] = useState("");
   const [activeId, setActiveId] = useState<string | null>(null);
   const [level, setLevel] = useState<1 | 2 | 3>(2);
+  const [scoreOpen, setScoreOpen] = useState(false);
+  const [openWorkflows, setOpenWorkflows] = useState<Record<string, boolean>>({});
+
+  const toggleWorkflow = (name: string) =>
+    setOpenWorkflows((prev) => ({ ...prev, [name]: !prev[name] }));
+
 
   useEffect(() => {
     setHistory(loadHistory());
