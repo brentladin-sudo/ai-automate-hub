@@ -433,13 +433,53 @@ function Index() {
                   style={{ animationDelay: "120ms" }}
                 >
                   <ScoreRail score={result.overallScore} size="lg" />
-                  <div className="mt-6 flex flex-wrap items-baseline gap-x-4 gap-y-1">
-                    <span className="font-display text-5xl font-bold tracking-tight text-primary">
-                      {result.overallScore}
-                      <span className="text-2xl text-muted-foreground">/100</span>
-                    </span>
-                    <span className="text-base font-semibold">{result.scoreLabel}</span>
+                  <div className="mt-6 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-3">
+                    <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+                      <span className="font-display text-5xl font-bold tracking-tight text-primary">
+                        {result.overallScore}
+                        <span className="text-2xl text-muted-foreground">/100</span>
+                      </span>
+                      <span className="text-base font-semibold">{result.scoreLabel}</span>
+                    </div>
+                    {result.dimensions && result.dimensions.length > 0 && (
+                      <ExpandToggle
+                        open={scoreOpen}
+                        onClick={() => setScoreOpen((v) => !v)}
+                        label="Breakdown"
+                      />
+                    )}
                   </div>
+
+                  {result.dimensions && result.dimensions.length > 0 && (
+                    <Collapse open={scoreOpen}>
+                      <div className="mt-7 border-t border-border pt-6">
+                        <p className="text-xs leading-relaxed text-muted-foreground">
+                          The overall score is a weighted composite of these four
+                          sub-dimensions.
+                        </p>
+                        <div className="mt-5 space-y-6">
+                          {result.dimensions.map((d, di) => (
+                            <div key={d.name}>
+                              <div className="flex items-baseline justify-between gap-3">
+                                <span className="text-sm font-semibold">{d.name}</span>
+                                <span className="font-display text-sm font-bold text-primary">
+                                  {d.score}/100
+                                </span>
+                              </div>
+                              <div className="mt-2">
+                                {scoreOpen && (
+                                  <ScoreRail score={d.score} size="sm" delay={di * 90} />
+                                )}
+                              </div>
+                              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                                {d.explanation}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </Collapse>
+                  )}
                 </section>
 
                 <section
