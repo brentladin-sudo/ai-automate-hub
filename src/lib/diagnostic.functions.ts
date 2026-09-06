@@ -55,10 +55,15 @@ Return ONLY valid JSON with this exact shape:
       "score": <integer 0-100 automation potential for this workflow>,
       "manualToday": <one sentence describing how this workflow is done manually today>,
       "aiApproach": <one sentence describing the suggested AI-driven automation>,
-      "tools": [<2-4 specific real AI tools or platforms relevant to this workflow, e.g. "OpenAI GPT-4o", "Zapier AI", "Intercom Fin", "UiPath", "Salesforce Einstein">]
+      "stack": {
+        "level1": { "approach": <one sentence: quick, low-effort no-code fix shippable in days>, "tools": [<2-3 real off-the-shelf tools>] },
+        "level2": { "approach": <one sentence: mid-effort integrated solution, weeks of work>, "tools": [<2-4 real tools/platforms>] },
+        "level3": { "approach": <one sentence: bespoke engineered system, months of work>, "tools": [<2-4 real platforms, models, or infrastructure>] }
+      }
     }
   ]
 }
+Level 1 = simple/off-the-shelf, Level 2 = integrated/configured, Level 3 = custom-built and deeply integrated. Tools must be real and specific (e.g. "Zapier AI", "Intercom Fin", "OpenAI GPT-4o", "UiPath", "LangGraph", "Snowflake Cortex").
 Include 3 to 5 workflows. Order them by score descending.`;
 
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
