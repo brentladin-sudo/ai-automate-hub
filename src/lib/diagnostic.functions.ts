@@ -134,6 +134,9 @@ Include 3 to 5 workflows, ordered by score descending. Exactly the 4 dimensions 
             score: z.number().min(0).max(100),
             manualToday: z.string(),
             aiApproach: z.string(),
+            timeCost: z.string().optional(),
+            readinessTier: z.enum(["Quick Win", "Structural Play"]).optional(),
+            toolRationale: z.string().optional(),
             stack: z.object({
               level1: tierSchema,
               level2: tierSchema,
@@ -143,6 +146,18 @@ Include 3 to 5 workflows, ordered by score descending. Exactly the 4 dimensions 
         )
         .min(3)
         .max(5),
+      dimensions: z
+        .array(
+          z.object({
+            name: z.string(),
+            score: z.number().min(0).max(100),
+            explanation: z.string(),
+          }),
+        )
+        .optional(),
+      limitations: z
+        .array(z.object({ title: z.string(), detail: z.string() }))
+        .optional(),
     });
 
     const validated = resultSchema.parse(parsed);
