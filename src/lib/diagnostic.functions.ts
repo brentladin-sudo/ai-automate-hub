@@ -1,9 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
+import { lookup } from "node:dns/promises";
 import { z } from "zod";
 
 const inputSchema = z.object({
   companyName: z.string().min(1).max(200),
   description: z.string().max(4000).optional(),
+  websiteUrl: z.string().max(300).optional(),
 });
 
 export type StackTier = {
@@ -64,6 +66,20 @@ export type ExistingStack = {
   note: string;
 };
 
+export type SiteSignal = {
+  label: string;
+  present: boolean;
+};
+
+export type SiteCheck = {
+  url: string;
+  fetchedOk: boolean;
+  signals: SiteSignal[];
+  primaryCta: string | null;
+  /** What was checked, or why the check didn't happen — always shown, success or failure. */
+  note: string;
+};
+
 export type DiagnosticResult = {
   companyName: string;
   overallScore: number;
@@ -72,10 +88,157 @@ export type DiagnosticResult = {
   summary: string;
   snapshot?: CompanySnapshot | undefined;
   existingStack?: ExistingStack | undefined;
+  /** Present only when a website URL was submitted. Computed directly from the fetched
+   * HTML server-side — not LLM output — so it's accurate regardless of what the model does with it. */
+  siteCheck?: SiteCheck | undefined;
   workflows: Workflow[];
   dimensions?: Dimension[] | undefined;
   limitations?: Limitation[] | undefined;
 };
+
+function isPrivateOrReservedIpv4(ip: string): boolean {
+  const parts = ip.split(".").map(Number);
+  if (parts.length !== 4 || parts.some((p) => Number.isNaN(p) || p < 0 || p > 255)) return true;
+  const a = parts[0]!;
+  const b = parts[1]!;
+  if (a === 0 || a === 10 || a === 127) return true;
+  if (a === 169 && b === 254) return true; // link-local, incl. cloud metadata endpoint
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 100 && b >= 64 && b <= 127) return true; // carrier-grade NAT
+  if (a >= 224) return true; // multicast / reserved
+  return false;
+}
+
+function isPrivateOrReservedIpv6(ip: string): boolean {
+  const lower = ip.toLowerCase();
+  if (lower === "::1" || lower === "::") return true;
+  if (lower.startsWith("fe80")) return true; // link-local
+  if (lower.startsWith("fc") || lower.startsWith("fd")) return true; // unique local fc00::/7
+  if (lower.startsWith("::ffff:")) return isPrivateOrReservedIpv4(lower.slice(7));
+  return false;
+}
+
+/** Resolves the hostname and rejects anything pointing at a private, loopback, or
+ * link-local address, guarding against the server being used to probe internal
+ * network endpoints (SSRF) via a user-supplied "company website" URL. */
+async function isSafeHostname(hostname: string): Promise<boolean> {
+  const lower = hostname.toLowerCase();
+  if (lower === "localhost" || lower.endsWith(".localhost") || lower === "0.0.0.0") return false;
+  try {
+    const addresses = await lookup(hostname, { all: true });
+    if (addresses.length === 0) return false;
+    return addresses.every(({ address, family }) =>
+      family === 6 ? !isPrivateOrReservedIpv6(address) : !isPrivateOrReservedIpv4(address),
+    );
+  } catch {
+    return false;
+  }
+}
+
+const SIGNAL_PATTERNS: { label: string; patterns: RegExp[] }[] = [
+  {
+    label: "Online booking / scheduling",
+    patterns: [
+      /calendly\.com/,
+      /opentable\.com/,
+      /acuityscheduling\.com/,
+      /squareup\.com\/appointments/,
+      /book\s*(a|an)?\s*(table|appointment|demo|call|room|now)/,
+      /schedule\s*(a|an)?\s*(demo|call|appointment|consultation)/,
+    ],
+  },
+  {
+    label: "Live chat widget",
+    patterns: [
+      /widget\.intercom\.io|intercom\.io\/embed/,
+      /js\.driftt\.com/,
+      /static\.zdassets\.com/,
+      /embed\.tawk\.to/,
+      /client\.crisp\.chat/,
+      /livechatinc\.com/,
+    ],
+  },
+  {
+    label: "Online payments / e-commerce",
+    patterns: [
+      /js\.stripe\.com|checkout\.stripe\.com/,
+      /cdn\.shopify\.com/,
+      /paypal\.com\/sdk/,
+      /add[\s-]*to[\s-]*cart/i,
+      /woocommerce/,
+    ],
+  },
+];
+
+async function checkWebsite(rawUrl: string): Promise<SiteCheck> {
+  const fail = (note: string, url = rawUrl): SiteCheck => ({
+    url,
+    fetchedOk: false,
+    signals: [],
+    primaryCta: null,
+    note,
+  });
+
+  let url: URL;
+  try {
+    url = new URL(/^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`);
+  } catch {
+    return fail("The provided website URL couldn't be parsed, so this report falls back to inference only.");
+  }
+
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return fail("Only http/https website URLs are supported, so this report falls back to inference only.", url.toString());
+  }
+
+  if (!(await isSafeHostname(url.hostname))) {
+    return fail(
+      "This URL couldn't be verified as a reachable public website, so this report falls back to inference only.",
+      url.toString(),
+    );
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
+  try {
+    const res = await fetch(url.toString(), {
+      signal: controller.signal,
+      redirect: "manual",
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; GoAutomateBot/1.0)" },
+    });
+
+    if (res.status >= 300 && res.status < 400) {
+      return fail("This website redirected, so it couldn't be checked directly — falling back to inference only.", url.toString());
+    }
+    if (!res.ok) {
+      return fail(`The website returned HTTP ${res.status}, so this report falls back to inference only.`, url.toString());
+    }
+
+    const html = (await res.text()).slice(0, 500_000);
+    const lower = html.toLowerCase();
+
+    const signals: SiteSignal[] = SIGNAL_PATTERNS.map(({ label, patterns }) => ({
+      label,
+      present: patterns.some((p) => p.test(lower)),
+    }));
+
+    const ctaCandidates = [...html.matchAll(/<(?:a|button)[^>]*>\s*([^<]{2,40}?)\s*<\/(?:a|button)>/gi)]
+      .map((m) => (m[1] ?? "").replace(/\s+/g, " ").trim())
+      .filter((text) => /get started|book|schedule|sign up|contact|buy|shop|order now|start|try|demo|learn more|call us/i.test(text));
+
+    return {
+      url: url.toString(),
+      fetchedOk: true,
+      signals,
+      primaryCta: ctaCandidates[0] ?? null,
+      note: "These signals were detected directly from the company's homepage HTML — a real check, not an LLM guess.",
+    };
+  } catch {
+    return fail("Couldn't reach this website (timeout or network error), so this report falls back to inference only.", url.toString());
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
 export const runDiagnostic = createServerFn({ method: "POST" })
   .inputValidator((data) => inputSchema.parse(data))
@@ -83,11 +246,20 @@ export const runDiagnostic = createServerFn({ method: "POST" })
     const apiKey = process.env["LOVABLE_API_KEY"];
     if (!apiKey) throw new Error("AI gateway is not configured");
 
+    const siteCheck = data.websiteUrl ? await checkWebsite(data.websiteUrl) : undefined;
+
+    const groundingBlock =
+      siteCheck?.fetchedOk
+        ? `\nVerified facts from the company's actual website (${siteCheck.url}) — these were extracted directly from the live page, not guessed. Treat them as confirmed ground truth: cite them explicitly in "whatTheyDo", "businessModel", or "keyContext" where relevant, and never state anything that contradicts them. Everything else about this company remains unverified and must still be framed as inference.\n${siteCheck.signals
+            .map((s) => `- ${s.label}: ${s.present ? "present on the site" : "not detected on the site"}`)
+            .join("\n")}\n- Primary call-to-action on homepage: ${siteCheck.primaryCta ? `"${siteCheck.primaryCta}"` : "none clearly detected"}\n`
+        : "";
+
     const prompt = `You are a senior AI-automation consultant. Produce a sharp, credible automation diagnostic for the company below. Be specific to its industry and size; avoid generic filler.
 
 Company: ${data.companyName}
 ${data.description ? `Description: ${data.description}` : "No description provided — infer from the company name and public knowledge if available."}
-
+${groundingBlock}
 Return ONLY valid JSON with this exact shape:
 {
   "overallScore": <integer 0-100, where 100 = extremely high AI automation potential>,
@@ -136,7 +308,7 @@ Return ONLY valid JSON with this exact shape:
 }
 Level 1 = simple/off-the-shelf, Level 2 = integrated/configured, Level 3 = custom-built and deeply integrated. Tools must be real and specific (e.g. "Zapier AI", "Intercom Fin", "OpenAI GPT-4o", "UiPath", "LangGraph", "Snowflake Cortex").
 Include 3 to 5 workflows, ordered by score descending. Exactly the 4 dimensions listed, in that order — the overallScore should read as a weighted composite of them. Include 3-4 limitations covering actual internal data quality, organizational political will, budget constraints, and change management capacity.
-Be honest about what you don't actually know: you have no real-time access to this company's website, job postings, or tech stack, so "existingStack" and "sizeAndFootprint" must read as reasoned inferences from public patterns for companies like this one — never state a specific fact (an exact employee count, a confirmed tool in use) as if it were verified. If you have no reasonable basis to infer likely tools at all, return an empty "tools" array with "confidence": "unknown" and explain why in "note" rather than inventing plausible-sounding ones.`;
+Be honest about what you don't actually know: ${siteCheck?.fetchedOk ? "aside from the verified website facts given above, you have" : "you have"} no real-time access to this company's job postings or tech stack, so "existingStack" and "sizeAndFootprint" must read as reasoned inferences from public patterns for companies like this one — never state a specific fact (an exact employee count, a confirmed tool in use) as if it were verified unless it was given to you above as a verified website fact. If you have no reasonable basis to infer likely tools at all, return an empty "tools" array with "confidence": "unknown" and explain why in "note" rather than inventing plausible-sounding ones.`;
 
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -255,5 +427,5 @@ Be honest about what you don't actually know: you have no real-time access to th
       throw new Error("Diagnostic failed — the AI response didn't match the expected format. Please try again.");
     }
 
-    return { companyName: data.companyName, ...validation.data };
+    return { companyName: data.companyName, siteCheck, ...validation.data };
   });

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
+  CheckCircle2,
   ChevronDown,
   Clock,
   History,
@@ -14,6 +15,7 @@ import {
   Trash2,
   UserCog,
   Wrench,
+  XCircle,
   Zap,
 } from "lucide-react";
 import { runDiagnostic, type DiagnosticResult, type Workflow } from "@/lib/diagnostic.functions";
@@ -208,6 +210,7 @@ function Collapse({ open, children }: { open: boolean; children: React.ReactNode
 function Index() {
   const [companyName, setCompanyName] = useState("");
   const [description, setDescription] = useState("");
+  const [websiteUrl, setWebsiteUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<DiagnosticResult | null>(null);
@@ -245,6 +248,7 @@ function Index() {
         data: {
           companyName: companyName.trim(),
           description: description.trim() || undefined,
+          websiteUrl: websiteUrl.trim() || undefined,
         },
       });
       const entry: HistoryEntry = {
@@ -272,6 +276,7 @@ function Index() {
     setActiveId(null);
     setCompanyName("");
     setDescription("");
+    setWebsiteUrl("");
     setError(null);
   };
 
@@ -429,6 +434,22 @@ function Index() {
                     rows={4}
                     className="mt-2 w-full resize-none rounded-xl border border-input bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:ring-2 focus:ring-ring/40 focus:outline-none"
                   />
+                  <label
+                    htmlFor="website"
+                    className="mt-5 block text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                  >
+                    Company website{" "}
+                    <span className="font-normal normal-case text-muted-foreground/70">
+                      (optional — grounds the report in a few real signals from the site)
+                    </span>
+                  </label>
+                  <input
+                    id="website"
+                    value={websiteUrl}
+                    onChange={(e) => setWebsiteUrl(e.target.value)}
+                    placeholder="e.g. acmelogistics.com"
+                    className="mt-2 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:ring-2 focus:ring-ring/40 focus:outline-none"
+                  />
                   {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
                   <button
                     type="submit"
@@ -546,6 +567,47 @@ function Index() {
                         companies, not verified facts about this specific business. Treat
                         it as a starting hypothesis to test, not an audit.
                       </p>
+                      {result.siteCheck && (
+                        <div className="mt-4 border-t border-border/60 pt-4">
+                          {result.siteCheck.fetchedOk ? (
+                            <>
+                              <p className="text-xs font-semibold tracking-wide text-primary uppercase">
+                                Verified from{" "}
+                                {result.siteCheck.url.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                              </p>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {result.siteCheck.signals.map((s) => (
+                                  <span
+                                    key={s.label}
+                                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${
+                                      s.present
+                                        ? "bg-primary/15 text-primary"
+                                        : "bg-secondary text-muted-foreground"
+                                    }`}
+                                  >
+                                    {s.present ? (
+                                      <CheckCircle2 className="h-3 w-3" />
+                                    ) : (
+                                      <XCircle className="h-3 w-3" />
+                                    )}
+                                    {s.label}
+                                  </span>
+                                ))}
+                              </div>
+                              {result.siteCheck.primaryCta && (
+                                <p className="mt-2 text-xs text-muted-foreground">
+                                  Primary call-to-action detected on the homepage:{" "}
+                                  <span className="font-medium text-foreground">
+                                    "{result.siteCheck.primaryCta}"
+                                  </span>
+                                </p>
+                              )}
+                            </>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">{result.siteCheck.note}</p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </section>
