@@ -494,10 +494,82 @@ function Index() {
                   <h3 className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
                     Company Snapshot
                   </h3>
-                  <p className="mt-3 leading-relaxed text-muted-foreground">
-                    {result.summary}
-                  </p>
+                  {result.snapshot ? (
+                    <dl className="mt-4 space-y-4">
+                      <div>
+                        <dt className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                          What they do
+                        </dt>
+                        <dd className="mt-1 leading-relaxed text-muted-foreground">
+                          {result.snapshot.whatTheyDo}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                          Size &amp; footprint
+                        </dt>
+                        <dd className="mt-1 leading-relaxed text-muted-foreground">
+                          {result.snapshot.sizeAndFootprint}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                          Business model
+                        </dt>
+                        <dd className="mt-1 leading-relaxed text-muted-foreground">
+                          {result.snapshot.businessModel}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                          Key context
+                        </dt>
+                        <dd className="mt-1 leading-relaxed text-muted-foreground">
+                          {result.snapshot.keyContext}
+                        </dd>
+                      </div>
+                    </dl>
+                  ) : (
+                    <p className="mt-3 leading-relaxed text-muted-foreground">
+                      {result.summary}
+                    </p>
+                  )}
                 </section>
+
+                {result.existingStack && (
+                  <section
+                    className="animate-rise mt-6 rounded-2xl border border-border bg-card p-6 shadow-[var(--shadow-card)] sm:p-8"
+                    style={{ animationDelay: "260ms" }}
+                  >
+                    <h3 className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
+                      Existing AI / Automation Stack
+                    </h3>
+                    {result.existingStack.tools.length > 0 ? (
+                      <div className="mt-4 space-y-3">
+                        {result.existingStack.tools.map((tool) => (
+                          <div
+                            key={tool.name}
+                            className="flex items-start gap-3 rounded-xl border border-border/60 bg-background/40 p-3"
+                          >
+                            <Wrench className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                            <div>
+                              <p className="text-sm font-semibold">{tool.name}</p>
+                              <p className="mt-0.5 text-sm text-muted-foreground">{tool.use}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-3 text-sm text-muted-foreground">
+                        No specific tools could be reasonably inferred for this company.
+                      </p>
+                    )}
+                    <p className="mt-4 flex items-start gap-2 text-xs leading-relaxed text-muted-foreground/80">
+                      <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      <span>{result.existingStack.note}</span>
+                    </p>
+                  </section>
+                )}
 
                 <h3
                   className="animate-rise mt-12 font-display text-xl font-bold tracking-tight"

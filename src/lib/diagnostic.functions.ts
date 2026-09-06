@@ -40,11 +40,34 @@ export type Limitation = {
   detail: string;
 };
 
+export type CompanySnapshot = {
+  whatTheyDo: string;
+  sizeAndFootprint: string;
+  businessModel: string;
+  keyContext: string;
+};
+
+export type ExistingStackTool = {
+  name: string;
+  use: string;
+};
+
+export type ExistingStack = {
+  tools: ExistingStackTool[];
+  /** Whether the tools above are grounded in something checkable vs. a plausible guess. */
+  confidence: "inferred" | "unknown";
+  /** Explains what was/wasn't checked, or why nothing was found. */
+  note: string;
+};
+
 export type DiagnosticResult = {
   companyName: string;
   overallScore: number;
   scoreLabel: string;
+  /** Legacy flat summary (older saved reports). Superseded by `snapshot` when present. */
   summary: string;
+  snapshot?: CompanySnapshot;
+  existingStack?: ExistingStack;
   workflows: Workflow[];
   dimensions?: Dimension[];
   limitations?: Limitation[];
@@ -66,6 +89,19 @@ Return ONLY valid JSON with this exact shape:
   "overallScore": <integer 0-100, where 100 = extremely high AI automation potential>,
   "scoreLabel": <short qualitative label, e.g. "High Automation Potential">,
   "summary": <2-3 sentences: what the company does and its position in its industry>,
+  "snapshot": {
+    "whatTheyDo": <2-3 sentences: what the company actually does and its position in its industry>,
+    "sizeAndFootprint": <one sentence: best estimate of company size (employee count or SMB/mid-market/enterprise) and where it operates (HQ, regions). If this can't be known, say so explicitly rather than inventing a number>,
+    "businessModel": <one sentence: how the company makes money (B2B/B2C, product vs. service, subscription vs. transactional, etc.)>,
+    "keyContext": <one sentence: an operational detail relevant to automation potential, e.g. how labor-intensive operations are, tech-forward vs legacy, growth signals>
+  },
+  "existingStack": {
+    "tools": [
+      { "name": <a specific, real, publicly-plausible tool/platform this company likely already uses, e.g. based on its industry and size>, "use": <one short phrase on what it's likely used for> }
+    ],
+    "confidence": <"inferred" if you are naming plausible tools based on industry/size patterns rather than confirmed facts, "unknown" if you have no reasonable basis to guess>,
+    "note": <one sentence stating plainly that this list is inferred from general patterns for the industry/size (not confirmed from the company's actual public data), or, if confidence is "unknown", explaining that nothing could be reasonably inferred>
+  },
   "workflows": [
     {
       "name": <workflow name>,
@@ -93,7 +129,8 @@ Return ONLY valid JSON with this exact shape:
   ]
 }
 Level 1 = simple/off-the-shelf, Level 2 = integrated/configured, Level 3 = custom-built and deeply integrated. Tools must be real and specific (e.g. "Zapier AI", "Intercom Fin", "OpenAI GPT-4o", "UiPath", "LangGraph", "Snowflake Cortex").
-Include 3 to 5 workflows, ordered by score descending. Exactly the 4 dimensions listed, in that order — the overallScore should read as a weighted composite of them. Include 3-4 limitations covering actual internal data quality, organizational political will, budget constraints, and change management capacity.`;
+Include 3 to 5 workflows, ordered by score descending. Exactly the 4 dimensions listed, in that order — the overallScore should read as a weighted composite of them. Include 3-4 limitations covering actual internal data quality, organizational political will, budget constraints, and change management capacity.
+Be honest about what you don't actually know: you have no real-time access to this company's website, job postings, or tech stack, so "existingStack" and "sizeAndFootprint" must read as reasoned inferences from public patterns for companies like this one — never state a specific fact (an exact employee count, a confirmed tool in use) as if it were verified. If you have no reasonable basis to infer likely tools at all, return an empty "tools" array with "confidence": "unknown" and explain why in "note" rather than inventing plausible-sounding ones.`;
 
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -151,6 +188,21 @@ Include 3 to 5 workflows, ordered by score descending. Exactly the 4 dimensions 
       overallScore: z.number().min(0).max(100),
       scoreLabel: z.string(),
       summary: z.string(),
+      snapshot: z
+        .object({
+          whatTheyDo: z.string(),
+          sizeAndFootprint: z.string(),
+          businessModel: z.string(),
+          keyContext: z.string(),
+        })
+        .optional(),
+      existingStack: z
+        .object({
+          tools: z.array(z.object({ name: z.string(), use: z.string() })),
+          confidence: z.enum(["inferred", "unknown"]),
+          note: z.string(),
+        })
+        .optional(),
       workflows: z
         .array(
           z.object({
