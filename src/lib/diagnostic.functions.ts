@@ -100,7 +100,11 @@ Include 3 to 5 workflows. Order them by score descending.`;
             score: z.number().min(0).max(100),
             manualToday: z.string(),
             aiApproach: z.string(),
-            tools: z.array(z.string()),
+            stack: z.object({
+              level1: tierSchema,
+              level2: tierSchema,
+              level3: tierSchema,
+            }),
           }),
         )
         .min(3)
