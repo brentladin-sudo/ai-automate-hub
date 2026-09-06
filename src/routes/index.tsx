@@ -669,6 +669,30 @@ function Index() {
                     );
                   })}
                 </div>
+
+                <section className="mt-14 border-t border-dashed border-border pt-8">
+                  <h3 className="font-display text-lg font-semibold tracking-tight text-muted-foreground">
+                    What This Diagnostic Cannot Tell You
+                  </h3>
+                  <p className="mt-1 text-xs text-muted-foreground/70">
+                    Caveats, not findings — these need a conversation inside the business.
+                  </p>
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                    {(result.limitations ?? FALLBACK_LIMITATIONS).map((lim) => (
+                      <div
+                        key={lim.title}
+                        className="rounded-xl border border-dashed border-border bg-transparent px-5 py-4"
+                      >
+                        <p className="text-sm font-medium text-muted-foreground">
+                          {lim.title}
+                        </p>
+                        <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground/70">
+                          {lim.detail}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
               </div>
             )}
           </div>
