@@ -2,13 +2,17 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   ArrowRight,
+  ChevronDown,
+  Clock,
   History,
+  Info,
   Loader2,
   Plus,
   Search,
   Sparkles,
   Trash2,
   Wrench,
+  Zap,
 } from "lucide-react";
 import { runDiagnostic, type DiagnosticResult, type Workflow } from "@/lib/diagnostic.functions";
 
