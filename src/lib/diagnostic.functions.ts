@@ -23,6 +23,21 @@ export type Workflow = {
     level2: StackTier;
     level3: StackTier;
   };
+  /** Deeper layer — absent on older saved reports. */
+  timeCost?: string;
+  readinessTier?: "Quick Win" | "Structural Play";
+  toolRationale?: string;
+};
+
+export type Dimension = {
+  name: string;
+  score: number;
+  explanation: string;
+};
+
+export type Limitation = {
+  title: string;
+  detail: string;
 };
 
 export type DiagnosticResult = {
@@ -31,6 +46,8 @@ export type DiagnosticResult = {
   scoreLabel: string;
   summary: string;
   workflows: Workflow[];
+  dimensions?: Dimension[];
+  limitations?: Limitation[];
 };
 
 export const runDiagnostic = createServerFn({ method: "POST" })
