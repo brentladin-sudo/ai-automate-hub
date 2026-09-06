@@ -467,9 +467,12 @@ function Index() {
                                 </span>
                               </div>
                               <div className="mt-2">
-                                {scoreOpen && (
-                                  <ScoreRail score={d.score} size="sm" delay={di * 90} />
-                                )}
+                                <ScoreRail
+                                  key={scoreOpen ? "open" : "closed"}
+                                  score={d.score}
+                                  size="sm"
+                                  delay={di * 90}
+                                />
                               </div>
                               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                                 {d.explanation}
