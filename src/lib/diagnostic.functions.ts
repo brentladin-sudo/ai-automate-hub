@@ -17,16 +17,20 @@ export type Workflow = {
   manualToday: string;
   aiApproach: string;
   /** Legacy single-tier stack (older saved reports). */
-  tools?: string[];
-  stack?: {
-    level1: StackTier;
-    level2: StackTier;
-    level3: StackTier;
-  };
+  tools?: string[] | undefined;
+  stack?:
+    | {
+        level1: StackTier;
+        level2: StackTier;
+        level3: StackTier;
+      }
+    | undefined;
   /** Deeper layer — absent on older saved reports. */
-  timeCost?: string;
-  readinessTier?: "Quick Win" | "Structural Play";
-  toolRationale?: string;
+  timeCost?: string | undefined;
+  readinessTier?: "Quick Win" | "Structural Play" | undefined;
+  toolRationale?: string | undefined;
+  riskFactors?: string | undefined;
+  ownership?: string | undefined;
 };
 
 export type Dimension = {
@@ -66,11 +70,11 @@ export type DiagnosticResult = {
   scoreLabel: string;
   /** Legacy flat summary (older saved reports). Superseded by `snapshot` when present. */
   summary: string;
-  snapshot?: CompanySnapshot;
-  existingStack?: ExistingStack;
+  snapshot?: CompanySnapshot | undefined;
+  existingStack?: ExistingStack | undefined;
   workflows: Workflow[];
-  dimensions?: Dimension[];
-  limitations?: Limitation[];
+  dimensions?: Dimension[] | undefined;
+  limitations?: Limitation[] | undefined;
 };
 
 export const runDiagnostic = createServerFn({ method: "POST" })
@@ -111,6 +115,8 @@ Return ONLY valid JSON with this exact shape:
       "timeCost": <one short phrase framing time/cost, e.g. "~6 hours per week per affected employee, ~$28k/yr across the team">,
       "readinessTier": <"Quick Win" or "Structural Play">,
       "toolRationale": <1-2 sentences on why the recommended tool fits this workflow better than alternatives>,
+      "riskFactors": <one sentence naming the main risk in adopting this specific automation — whichever is most relevant: data quality, integration fragility, or a customer-facing failure mode>,
+      "ownership": <one short phrase on who would implement this, e.g. "Business owner can configure directly", "Needs a part-time ops hire", "Best handled by the software vendor's onboarding team">,
       "stack": {
         "level1": { "approach": <one sentence: quick, low-effort no-code fix shippable in days>, "tools": [<2-3 real off-the-shelf tools>] },
         "level2": { "approach": <one sentence: mid-effort integrated solution, weeks of work>, "tools": [<2-4 real tools/platforms>] },
@@ -213,6 +219,8 @@ Be honest about what you don't actually know: you have no real-time access to th
             timeCost: z.string().optional(),
             readinessTier: z.enum(["Quick Win", "Structural Play"]).optional(),
             toolRationale: z.string().optional(),
+            riskFactors: z.string().optional(),
+            ownership: z.string().optional(),
             stack: z.object({
               level1: tierSchema,
               level2: tierSchema,
