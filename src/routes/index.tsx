@@ -126,6 +126,46 @@ function tierFor(wf: Workflow, level: 1 | 2 | 3) {
   return { approach: wf.aiApproach, tools: wf.tools ?? [] };
 }
 
+function ExpandToggle({
+  open,
+  onClick,
+  label,
+}: {
+  open: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-expanded={open}
+      className="inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary/40 px-3 py-1.5 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase transition-colors hover:border-primary/40 hover:text-foreground"
+    >
+      {open ? "Less" : label}
+      <ChevronDown
+        className={`h-3.5 w-3.5 transition-transform duration-300 ${open ? "rotate-180" : ""}`}
+      />
+    </button>
+  );
+}
+
+function Collapse({ open, children }: { open: boolean; children: React.ReactNode }) {
+  const [mounted, setMounted] = useState(open);
+
+  useEffect(() => {
+    if (open) setMounted(true);
+  }, [open]);
+
+  return (
+    <div
+      className="grid transition-[grid-template-rows,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
+      style={{ gridTemplateRows: open ? "1fr" : "0fr", opacity: open ? 1 : 0 }}
+    >
+      <div className="overflow-hidden">{mounted ? children : null}</div>
+    </div>
+  );
+}
+
 function Index() {
   const [companyName, setCompanyName] = useState("");
   const [description, setDescription] = useState("");
